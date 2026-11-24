@@ -1,0 +1,36 @@
+@startuml 02_sequence_abr
+title ABR switching under the tc bandwidth steps (hls.js)
+skinparam shadowing false
+participant "tc_steps.sh" as TC
+participant "Nginx / Wi-Fi link" as NET
+participant "hls.js loader" as LD
+participant "EWMA estimator\n(fast 3 s, slow 9 s)" as EST
+participant "ABR controller" as ABR
+participant "Video element" as VID
+== start ==
+LD -> NET : GET master.m3u8
+NET --> LD : 3 levels (BANDWIDTH 2891 / 1461 / 691 kbit/s)
+LD -> ABR : first level = 720p
+== steady state: one segment per second ==
+loop every segment (1 s)
+  LD -> NET : GET 720p/segN.m4s
+  NET --> LD : 2.6 Mbit in about 0.13 s
+  LD -> EST : sample(size / load time, weight = load time)
+  EST --> ABR : estimate = min(fast, slow)
+  ABR -> ABR : up: 0.7 x est >= BANDWIDTH\ndown: 0.95 x est >= BANDWIDTH
+end
+== link drops to 2.5 Mbit/s ==
+TC -> NET : tbf rate 2500kbit
+LD -> NET : GET 720p/segN+1.m4s
+NET --> LD : slower than real time (~1.1 s per 1 s of video)
+LD -> EST : low sample, fast average drops
+EST --> ABR : estimate < 3043 kbit/s
+ABR --> LD : next level = 540p (switch after 6-9 s measured)
+LD -> VID : append 540p fragments (buffer stays > 1.4 s)
+== link recovers ==
+TC -> NET : tbf rate 5mbit
+LD -> EST : high samples, slow average rises
+note over EST, ABR : up-switch is conservative:\n720p needs est >= 4130 kbit/s,\nmeasured delay about 65 s
+EST --> ABR : estimate grows
+ABR --> LD : next level = 720p
+@enduml

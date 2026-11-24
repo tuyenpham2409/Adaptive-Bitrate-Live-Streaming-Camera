@@ -1,0 +1,6 @@
+scenario,ladder,seg_s,sync,nominal_load_pct,busy_pct,frames,dropped,enc_lat_mean_ms,enc_lat_max_ms,segments,audio_per_seg,join_lat_min_s,join_lat_mean_s,join_lat_max_s
+S1_planned_A,planned,2,3,80.6,80.5,1736,0,26.9,26.9,28,93.8,6.26,7.24,8.25
+S1_planned_B,planned,1,3,80.6,80.5,1736,0,26.9,26.9,57,46.9,3.13,3.61,4.12
+S1_planned_C,planned,1,2,80.6,80.5,1736,0,26.9,26.9,57,46.9,2.13,2.61,3.12
+S2_plus1080p,plus1080,1,3,180.6,99.9,1736,767,520.6,541.7,32,84.6,3.74,4.60,5.53
+S3_plus480p,plus480,1,3,100.3,99.9,1736,0,130.5,227.5,57,47.0,3.19,3.75,4.31

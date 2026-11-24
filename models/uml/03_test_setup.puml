@@ -1,0 +1,18 @@
+@startuml 03_test_setup
+title Week-3 test loop: bandwidth sweep with tc and logging
+skinparam shadowing false
+start
+:systemd starts FFmpeg (3 renditions, 1 s segments);
+:Open player page (?sync=3), start logging;
+:tc_steps.sh: none -> 5M -> 2.5M -> 1.2M -> 0.7M -> 1.2M -> 2.5M -> 5M -> none\n(60 s each, 9 min);
+fork
+  :monitor.sh every 2 s\nCPU of ffmpeg, temperature, throttled, free RAM;
+fork again
+  :Player logs every second\nlevel, estimate, buffer, latency, stalls;
+end fork
+:tc_steps.sh prints "limit removed on wlan0";
+:Download CSV logs;
+:Python model abr_sim.py replays the log;
+:Compare switch times, stalls, latency;
+stop
+@enduml

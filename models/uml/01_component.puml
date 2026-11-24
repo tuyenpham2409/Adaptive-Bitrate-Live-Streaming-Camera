@@ -1,0 +1,40 @@
+@startuml 01_component
+title Adaptive-Bitrate Live Streaming Camera - components (as implemented, week 3)
+skinparam componentStyle rectangle
+skinparam shadowing false
+
+node "Raspberry Pi 4 Model B (Raspberry Pi OS Lite 64-bit)" {
+  component "systemd\nabr-hls.service" as SVC
+  package "FFmpeg 7.1 process (scripts/run_abr.sh)" {
+    component "Capture\nV4L2 MJPEG 1280x720@30\nALSA plughw:1,0" as CAP
+    component "Scaler / splitter\n720p | 540p (960x540) | 360p" as SPL
+    component "3 x h264_v4l2m2m\n2500k | 1200k | 500k\nGOP = 30" as ENC
+    component "AAC encoder 128k\n(software)" as AAC
+    component "HLS muxer (fMP4)\n1 s segments, master.m3u8" as MUX
+  }
+  database "tmpfs\n/dev/shm/hls" as RAM
+  component "Nginx\n/hls/ (no-cache, CORS)" as NGX
+  component "bcm2835-codec\n(/dev/video11)\nshared H.264 HW block" as HW
+  component "Linux tc tbf\n(wlan0 test shaper)" as TC
+}
+node "USB devices" {
+  component "UVC webcam + USB mic" as CAM
+}
+node "Client laptop (browser)" {
+  component "hls.js player\nABR controller + EWMA estimator" as HLS
+  component "Test logger\n(CSV: level, estimate, buffer, latency)" as LOG
+}
+CAM --> CAP : V4L2 / ALSA
+CAP --> SPL : decoded frames
+SPL --> ENC
+ENC ..> HW : 3 jobs / frame (shared)
+CAP --> AAC : PCM 48 kHz
+ENC --> MUX
+AAC --> MUX
+MUX --> RAM : segments + playlists
+RAM --> NGX
+NGX --> TC : HTTP
+TC --> HLS : Wi-Fi (limited 5 -> 0.7 Mbit/s)
+HLS --> LOG
+SVC ..> CAP : starts at boot (53 s to video)
+@enduml

@@ -1,0 +1,24 @@
+[Unit]
+Description=Adaptive-bitrate HLS camera (FFmpeg)
+After=network-online.target sound.target nginx.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=g1pi
+SupplementaryGroups=video audio
+ExecStartPre=/bin/sleep 5
+ExecStart=/home/g1pi/Adaptive-Bitrate-Live-Streaming-Camera/scripts/run_abr.sh
+# Stable device names (survive reboots/replugging)
+Environment=VIDEO_DEV=/dev/v4l/by-id/usb-Sonix_Technology_Co.__Ltd._USB_2.0_Camera_SN0001-video-index0
+Environment=AUDIO_DEV=plughw:CARD=Device,DEV=0
+# Uncomment after the latency test (step 4) if you choose 1-second segments
+#Environment=SEG=1
+#Environment=GOP=30
+Environment=STATS=-nostats
+KillSignal=SIGINT
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

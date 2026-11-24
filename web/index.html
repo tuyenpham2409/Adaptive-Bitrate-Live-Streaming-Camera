@@ -1,7 +1,135 @@
-<video id="v" controls autoplay muted playsinline style="width:100%;max-width:960px"></video>
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>ABR Live Camera</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 16px; background: #111; color: #eee; }
+  video { width: 100%; max-width: 960px; background: #000; display: block; }
+  #stats { font: 14px/1.6 monospace; margin: 10px 0; }
+  #stats b { color: #7fd; }
+  button { margin: 2px 4px 2px 0; padding: 4px 10px; }
+  button.on { background: #7fd; }
+</style>
+</head>
+<body>
+<video id="v" controls autoplay muted playsinline></video>
+<div id="stats">loading…</div>
+<div id="levels"></div>
+<div style="margin-top:8px">
+  <button id="csv">Download log (CSV)</button>
+  <button id="clear">Clear log</button>
+  <button id="native">Actual pixel size: off</button>
+  <span id="count"></span>
+</div>
 <script src="https://cdn.jsdelivr.net/npm/hls.js@1/dist/hls.min.js"></script>
 <script>
-  const src = '/hls/stream.m3u8', v = document.getElementById('v');
-  if (Hls.isSupported()) { const h = new Hls(); h.loadSource(src); h.attachMedia(v); }
-  else if (v.canPlayType('application/vnd.apple.mpegurl')) v.src = src;
+// URL options: ?sync=2 (live sync in segments, default 3)  ?src=/hls/master.m3u8
+const q = new URLSearchParams(location.search);
+const src = q.get('src') || '/hls/master.m3u8';
+const sync = parseInt(q.get('sync') || '3', 10);
+const v = document.getElementById('v');
+const log = [];          // one row per second
+let lastFragKbps = 0, stalls = 0, switches = 0;
+
+let hls = null, t0 = Date.now(), status = 'waiting for stream…';
+
+function paint() {
+  document.querySelectorAll('#levels button').forEach(b => {
+    const i = +b.dataset.idx;
+    b.classList.toggle('on', hls && (hls.autoLevelEnabled ? i === -1 : i === hls.currentLevel));
+  });
+}
+
+function start() {
+  hls = new Hls({ liveSyncDurationCount: sync, liveMaxLatencyDurationCount: sync + 3 });
+  hls.loadSource(src);
+  hls.attachMedia(v);
+
+  hls.on(Hls.Events.MANIFEST_PARSED, () => {
+    status = 'playing';
+    const box = document.getElementById('levels');
+    box.innerHTML = '';
+    const mk = (label, idx) => {
+      const b = document.createElement('button');
+      b.textContent = label;
+      b.onclick = () => { hls.currentLevel = idx; paint(); };
+      b.dataset.idx = idx;
+      box.appendChild(b);
+    };
+    mk('Auto', -1);
+    hls.levels.forEach((l, i) => mk(l.height + 'p', i));
+    paint();
+    v.play().catch(() => {});
+  });
+
+  hls.on(Hls.Events.LEVEL_SWITCHED, () => { switches++; paint(); });
+  hls.on(Hls.Events.FRAG_LOADED, (_, d) => {
+    const s = d.frag.stats, ms = s.loading.end - s.loading.start;
+    if (ms > 0) lastFragKbps = Math.round(s.loaded * 8 / ms);   // bits/ms = kbit/s
+  });
+  hls.on(Hls.Events.ERROR, (_, d) => {
+    if (d.details === Hls.ErrorDetails.BUFFER_STALLED_ERROR) stalls++;
+    if (!d.fatal) return;
+    if (d.type === Hls.ErrorTypes.MEDIA_ERROR) { hls.recoverMediaError(); return; }
+    // stream not up yet (e.g. Pi still booting) or lost: retry every 3 s
+    status = 'stream unavailable (' + d.details + '), retrying…';
+    hls.destroy(); hls = null;
+    setTimeout(start, 3000);
+  });
+}
+
+if (!Hls.isSupported()) {
+  v.src = src;           // Safari native HLS, no stats
+} else {
+  start();
+  setInterval(() => {
+    if (!hls || !hls.levels || !hls.levels.length) {
+      document.getElementById('stats').textContent = status;
+      return;
+    }
+    const lvl = hls.levels[hls.currentLevel];
+    const buf = v.buffered.length ? v.buffered.end(v.buffered.length - 1) - v.currentTime : 0;
+    const q = v.getVideoPlaybackQuality ? v.getVideoPlaybackQuality() : {};
+    const row = {
+      t_s: ((Date.now() - t0) / 1000).toFixed(0),
+      clock: new Date().toLocaleTimeString('en-GB'),
+      level: lvl ? lvl.height + 'p' : '-',
+      decoded: v.videoWidth + 'x' + v.videoHeight,
+      level_kbps: lvl ? Math.round(lvl.bitrate / 1000) : 0,
+      est_kbps: Math.round(hls.bandwidthEstimate / 1000),
+      frag_kbps: lastFragKbps,
+      buffer_s: buf.toFixed(2),
+      latency_s: (hls.latency || 0).toFixed(2),
+      dropped: q.droppedVideoFrames || 0,
+      stalls, switches,
+      mode: hls.autoLevelEnabled ? 'auto' : 'manual'
+    };
+    log.push(row);
+    document.getElementById('stats').innerHTML =
+      `level <b>${row.level}</b> (${row.level_kbps} kb/s) · decoded <b>${row.decoded}</b> · estimate <b>${row.est_kbps}</b> kb/s · ` +
+      `last segment <b>${row.frag_kbps}</b> kb/s<br>buffer <b>${row.buffer_s}</b> s · latency <b>${row.latency_s}</b> s · ` +
+      `dropped ${row.dropped} · stalls ${stalls} · switches ${switches} · sync ${sync} seg · ${row.mode}`;
+    document.getElementById('count').textContent = log.length + ' rows';
+  }, 1000);
+}
+
+document.getElementById('csv').onclick = () => {
+  if (!log.length) return;
+  const cols = Object.keys(log[0]);
+  const text = [cols.join(','), ...log.map(r => cols.map(c => r[c]).join(','))].join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text], { type: 'text/csv' }));
+  a.download = 'abr_log_' + new Date().toISOString().slice(0, 19).replace(/:/g, '') + '.csv';
+  a.click();
+};
+document.getElementById('native').onclick = (e) => {
+  const on = v.style.width !== 'auto';
+  v.style.width = on ? 'auto' : '';
+  v.style.maxWidth = on ? 'none' : '';
+  e.target.textContent = 'Actual pixel size: ' + (on ? 'on' : 'off');
+};
+document.getElementById('clear').onclick = () => { log.length = 0; stalls = 0; switches = 0; };
 </script>
+</body>
+</html>
