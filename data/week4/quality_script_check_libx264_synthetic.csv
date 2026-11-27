@@ -1,0 +1,4 @@
+encoder,rendition,target_kbps,actual_kbps,encode_speed_x,psnr,ssim
+libx264,720p,2500,3005,3.25,43.9483,0.9945
+libx264,540p,1200,1372,4.58,41.8838,0.9815
+libx264,360p,500,515,5.98,39.4495,0.9548

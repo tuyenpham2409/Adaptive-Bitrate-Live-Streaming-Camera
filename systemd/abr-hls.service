@@ -17,6 +17,7 @@ Environment=AUDIO_DEV=plughw:CARD=Device,DEV=0
 #Environment=GOP=30
 Environment=STATS=-nostats
 KillSignal=SIGINT
+TimeoutStopSec=10
 Restart=always
 RestartSec=3
 

@@ -1,0 +1,23 @@
+@startuml 05_multi_viewer_sequence
+title Several viewers share one Wi-Fi uplink (model multi_viewer_sim.py)
+skinparam shadowing false
+participant "Viewer 1\n(ABR)" as v1
+participant "Viewer 2\n(ABR)" as v2
+participant "Viewer N\n(ABR)" as vn
+participant "Pi uplink C kbit/s\n(fair share)" as link
+participant "FFmpeg\nnew segment every 1 s" as ff
+loop every segment (1 s)
+  ff -> link : segment k is listed in the playlists
+  v1 -> link : GET segment k (level L1)
+  v2 -> link : GET segment k (level L2)
+  vn -> link : GET segment k (level LN)
+  note over link : each active transfer gets C / (number of active transfers);\nwhen one finishes the others speed up
+  link --> v1 : data, throughput s1
+  link --> v2 : data, throughput s2
+  link --> vn : data, throughput sN
+  v1 -> v1 : controller.on_segment(s1, buffer) -> next level
+  v2 -> v2 : controller.on_segment(s2, buffer) -> next level
+  vn -> vn : controller.on_segment(sN, buffer) -> next level
+end
+note right of link : s_i is below C because the viewers\noverlap: the estimate is pessimistic\nwhen N is large -> quality below what C allows
+@enduml

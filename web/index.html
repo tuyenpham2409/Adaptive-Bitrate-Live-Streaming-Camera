@@ -23,13 +23,18 @@
   <span id="count"></span>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/hls.js@1/dist/hls.min.js"></script>
+<script src="hybrid_abr.js"></script>
 <script>
 // URL options: ?sync=2 (live sync in segments, default 3)  ?src=/hls/master.m3u8
+//              ?abr=custom (team Hybrid ABR controller, web/hybrid_abr.js)  default: hls.js ABR
 const q = new URLSearchParams(location.search);
 const src = q.get('src') || '/hls/master.m3u8';
 const sync = parseInt(q.get('sync') || '3', 10);
+const abrMode = q.get('abr') === 'custom' ? 'custom' : 'default';
+const customOk = abrMode === 'custom' && typeof HybridAbr !== 'undefined';
 const v = document.getElementById('v');
 const log = [];          // one row per second
+if (abrMode === 'custom' && !customOk) console.warn('hybrid_abr.js not found: using the hls.js ABR');
 let lastFragKbps = 0, stalls = 0, switches = 0;
 
 let hls = null, t0 = Date.now(), status = 'waiting for stream…';
@@ -42,7 +47,9 @@ function paint() {
 }
 
 function start() {
-  hls = new Hls({ liveSyncDurationCount: sync, liveMaxLatencyDurationCount: sync + 3 });
+  const cfg = { liveSyncDurationCount: sync, liveMaxLatencyDurationCount: sync + 3 };
+  if (customOk) cfg.abrController = HybridAbr.makeController(Hls);   // team ABR instead of the hls.js one
+  hls = new Hls(cfg);
   hls.loadSource(src);
   hls.attachMedia(v);
 
@@ -103,7 +110,7 @@ if (!Hls.isSupported()) {
       latency_s: (hls.latency || 0).toFixed(2),
       dropped: q.droppedVideoFrames || 0,
       stalls, switches,
-      mode: hls.autoLevelEnabled ? 'auto' : 'manual'
+      mode: hls.autoLevelEnabled ? (customOk ? 'custom' : 'auto') : 'manual'
     };
     log.push(row);
     document.getElementById('stats').innerHTML =

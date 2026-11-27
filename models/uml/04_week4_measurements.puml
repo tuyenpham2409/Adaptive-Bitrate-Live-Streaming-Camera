@@ -1,0 +1,37 @@
+@startuml 04_week4_measurements
+title Week-4 measurement set-up: who measures what, where
+skinparam shadowing false
+skinparam componentStyle rectangle
+node "Raspberry Pi 4" as pi {
+  component "USB webcam\n(MJPEG 720p30 + mic)" as cam
+  component "FFmpeg\nh264_v4l2m2m x3 + AAC\nfMP4 HLS, 1 s segments" as ff
+  database "/dev/shm/hls\n(RAM disk)" as shm
+  component "Nginx :80" as ng
+  component "monitor.sh\nCPU, temp, RAM, RSS,\nconnections, restarts" as mon
+  component "healthcheck.sh\n(systemd timer, 30 s)" as hc
+}
+node "Laptop (Ubuntu)" as lap {
+  component "Browser: index.html\nhls.js + Hybrid ABR\n(Van: T15/T16)" as web
+  component "viewer_load.py\nN simulated viewers\n(Tuyen: T18)" as vl
+  component "av_sync.py\nflash-beep + container\n(Doanh: T19)" as av
+  component "frame_stats.py\nmissing / duplicated frames\n(Doanh: T20)" as fs
+  component "quality_eval.py\nPSNR / SSIM / VMAF\n(Doanh: T21)" as qe
+  component "stability_report.py\n(Tuyen: T17)" as sr
+}
+node "Test devices" as dev {
+  component "Phone / screen\nflash + beep clip" as clip
+  component "tc tbf\n(bandwidth steps)" as tc
+}
+cam --> ff
+ff --> shm
+shm --> ng
+ng --> web : HLS
+ng --> vl : HLS x N
+ng --> av : record 40 s
+clip ..> cam : light + sound
+cam ..> fs : 30 s raw MJPEG\n(service stopped)
+cam ..> qe : reference clip
+mon --> sr : CSV (1 h)
+hc ..> ff : restart if playlist\nolder than 15 s
+tc ..> ng : limits wlan0
+@enduml

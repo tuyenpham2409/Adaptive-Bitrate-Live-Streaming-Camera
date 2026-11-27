@@ -1,0 +1,6 @@
+[Unit]
+Description=Check that the HLS playlists are still being updated
+
+[Service]
+Type=oneshot
+ExecStart=/home/g1pi/Adaptive-Bitrate-Live-Streaming-Camera/scripts/healthcheck.sh
